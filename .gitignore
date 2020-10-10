@@ -1,2 +1,6 @@
 #ignore .terraform directory
 .terraform/
+
+#ignore pusing tfstate files to git
+terraform.tfstate
+terraform.tfstate.backup
