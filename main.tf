@@ -3,6 +3,37 @@ provider "aws" {
   region = "us-east-1" #Todo remove the hard coded value
 }
 
+#Create postgress RDS inside default VPC / Todo move RDS to private VPC
+resource "aws_db_instance" "default" {
+  identifier = "postgres"
+
+  engine              = "postgres"
+  engine_version      = "9.6.1" 
+  instance_class      = "db.t2.micro"
+  allocated_storage   = 5
+  storage_encrypted   = false
+  publicly_accessible = true  #make data base publically accsible to ease initial testing
+  skip_final_snapshot = true
+  name                = "app"
+  username            = "postgres"
+  password            = "changeme"
+  port                = "5432"
+
+  #vpc_security_group_ids = [data.aws_security_group.default.id]
+
+  maintenance_window = "Mon:00:00-Mon:03:00"
+  backup_window      = "03:00-06:00"
+
+  # disable backups to create DB faster
+  backup_retention_period = 0
+
+  tags = {
+    Owner       = "servian"
+  }
+  #deletion protection has been dissabled to ease testing
+  deletion_protection = false
+}
+
 #create AWS ecr repo to manage servian docker image
 resource "aws_ecr_repository" "servian_ecr_repo" {
   name = "servian-ecr-repo" # Naming repo
