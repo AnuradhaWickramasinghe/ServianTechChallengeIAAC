@@ -53,6 +53,26 @@ resource "aws_ecs_task_definition" "first_task" {
   container_definitions    = <<DEFINITION
   [
     {
+      "name": "update-db",
+      "image": "${aws_ecr_repository.servian_ecr_repo.repository_url}",
+      "essential": false,
+      "command": [
+        "updatedb" ,
+        "-s"
+      ],
+       "logConfiguration": {
+        "logDriver": "awslogs",
+        "secretOptions": null,
+        "options": {
+          "awslogs-group": "/ecs/update-db",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+      "memory": 512,
+      "cpu": 256
+    },
+    {
       "name": "first-task",
       "image": "${aws_ecr_repository.servian_ecr_repo.repository_url}",
       "essential": true,
@@ -81,8 +101,8 @@ resource "aws_ecs_task_definition" "first_task" {
   DEFINITION
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
-  memory                   = 512 # memory for container 
-  cpu                      = 256 # CPU for container 
+  memory                   = 1024 # memory for container 
+  cpu                      = 512 # CPU for container 
   execution_role_arn       = "${aws_iam_role.ecsTaskExecutionRole.arn}"
 
 }
