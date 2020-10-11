@@ -31,6 +31,18 @@ resource "aws_ecs_task_definition" "first_task" {
           "hostPort": 3000
         }
       ],
+      "command": [
+        "serve"
+      ],
+       "logConfiguration": {
+        "logDriver": "awslogs",
+        "secretOptions": null,
+        "options": {
+          "awslogs-group": "/ecs/first-task",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
       "memory": 512,
       "cpu": 256
     }
@@ -116,15 +128,15 @@ resource "aws_ecs_service" "first_service" {
 resource "aws_security_group" "service_security_group" {
   name = "service-security-group"
   ingress {
-    from_port = 3000
-    to_port   = 3000
+    from_port = 3000 #Todo remove the hard coded value
+    to_port   = 3000 #Todo remove the hard coded value
     protocol  = "TCP"
     # Only allowing traffic in from the load balancer security group
     security_groups = ["${aws_security_group.load_balancer_security_group.id}"]
   }
 
   egress {
-    from_port   = 0             
+    from_port   = 0      
     to_port     = 0             
     protocol    = "-1"          
     cidr_blocks = ["0.0.0.0/0"] 
@@ -152,7 +164,7 @@ resource "aws_security_group" "load_balancer_security_group" {
 #Creating aws application load balance target group
 resource "aws_lb_target_group" "target_group" {
   name        = "target-group"
-  port        = 3000
+  port        = 3000 #Todo remove the hard coded value
   protocol    = "HTTP"
   target_type = "ip"
   vpc_id      = "${aws_default_vpc.default_vpc.id}" # Referencing the default VPC
