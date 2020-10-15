@@ -8,11 +8,11 @@ resource "aws_db_instance" "default" {
   identifier = "postgres"
 
   engine              = "postgres"
-  engine_version      = "9.6.1" 
+  engine_version      = "9.6.1"
   instance_class      = "db.t2.micro"
   allocated_storage   = 5
   storage_encrypted   = false
-  publicly_accessible = true  #make data base publically accsible to ease initial testing
+  publicly_accessible = true #make data base publically accsible to ease initial testing
   skip_final_snapshot = true
   name                = "app"
   username            = "postgres"
@@ -28,7 +28,7 @@ resource "aws_db_instance" "default" {
   backup_retention_period = 0
 
   tags = {
-    Owner       = "servian"
+    Owner = "servian"
   }
   #deletion protection has been dissabled to ease testing
   deletion_protection = false
@@ -109,7 +109,7 @@ resource "aws_ecs_task_definition" "first_task" {
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
   memory                   = 1024 # memory for container 
-  cpu                      = 512 # CPU for container 
+  cpu                      = 512  # CPU for container 
   execution_role_arn       = "${aws_iam_role.ecsTaskExecutionRole.arn}"
 
 }
@@ -187,6 +187,10 @@ resource "aws_ecs_service" "first_service" {
     assign_public_ip = true
     security_groups  = ["${aws_security_group.service_security_group.id}"] # Setting the security group
   }
+
+  depends_on = [
+    aws_alb.application_load_balancer,
+  ]
 }
 
 resource "aws_security_group" "service_security_group" {
@@ -200,10 +204,10 @@ resource "aws_security_group" "service_security_group" {
   }
 
   egress {
-    from_port   = 0      
-    to_port     = 0             
-    protocol    = "-1"          
-    cidr_blocks = ["0.0.0.0/0"] 
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 }
 
@@ -211,16 +215,16 @@ resource "aws_security_group" "service_security_group" {
 resource "aws_security_group" "load_balancer_security_group" {
   name = "load-balancer-security-group"
   ingress {
-    from_port   = 80 
+    from_port   = 80
     to_port     = 80
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
   egress {
-    from_port   = 0             
-    to_port     = 0             
-    protocol    = "-1"          
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
 }
@@ -248,3 +252,17 @@ resource "aws_lb_listener" "listener" {
     target_group_arn = "${aws_lb_target_group.target_group.arn}" # Referencing our tagrte group
   }
 }
+
+output "alb_dns_name" {
+  description = "DNS name of ALB"
+  value       = aws_alb.application_load_balancer.dns_name
+}
+
+output "db_connection_endpoint" {
+  value = aws_db_instance.default.address
+}
+
+output "ecr_repo" {
+  value = aws_ecr_repository. servian_ecr_repo
+}
+
