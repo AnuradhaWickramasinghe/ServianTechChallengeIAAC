@@ -262,7 +262,11 @@ output "db_connection_endpoint" {
   value = aws_db_instance.default.address
 }
 
-output "ecr_repo" {
-  value = aws_ecr_repository. servian_ecr_repo
+output "ecr_repo_name" {
+  value = aws_ecr_repository. servian_ecr_repo.name
 }
+output "ecr_repository_url" {
+  value = aws_ecr_repository. servian_ecr_repo.repository_url
+}
+
 
