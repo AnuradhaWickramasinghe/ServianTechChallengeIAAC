@@ -1,6 +1,6 @@
 #initiating provider
 provider "aws" {
-  region = "us-east-1" #Todo remove the hard coded value
+  region = var.region
 }
 
 #Create postgress RDS inside default VPC / Todo move RDS to private VPC
@@ -8,16 +8,16 @@ resource "aws_db_instance" "default" {
   identifier = "postgres"
 
   engine              = "postgres"
-  engine_version      = "9.6.1"
-  instance_class      = "db.t2.micro"
-  allocated_storage   = 5
+  engine_version      = var.db_engine_version
+  instance_class      = var.db_instance_class
+  allocated_storage   = var.db_allocated_storage
   storage_encrypted   = false
   publicly_accessible = true #make data base publically accsible to ease initial testing
   skip_final_snapshot = true
-  name                = "app"
-  username            = "postgres"
-  password            = "changeme"
-  port                = "5432"
+  name                = var.db_name
+  username            = var.db_username
+  password            = var.db_password
+  port                = var.db_port
 
   #vpc_security_group_ids = [data.aws_security_group.default.id]
 
@@ -53,8 +53,6 @@ resource "aws_cloudwatch_log_group" "first-task" {
   name = "/ecs/first-task"
 }
 #Creating AWS ecs task definition to run servian docker container
-#Todo remove the hard coded value "3000" and make it parameter prompt on terraform apply
-
 resource "aws_ecs_task_definition" "first_task" {
   family                   = "first-task"
   container_definitions    = <<DEFINITION
@@ -72,7 +70,7 @@ resource "aws_ecs_task_definition" "first_task" {
         "secretOptions": null,
         "options": {
           "awslogs-group": "/ecs/update-db",
-          "awslogs-region": "us-east-1",
+          "awslogs-region": "${var.region}",
           "awslogs-stream-prefix": "ecs"
         }
       },
@@ -85,8 +83,8 @@ resource "aws_ecs_task_definition" "first_task" {
       "essential": true,
       "portMappings": [
         {
-          "containerPort": 3000,
-          "hostPort": 3000
+          "containerPort": ${var.listen_port},
+          "hostPort": ${var.listen_port}
         }
       ],
       "command": [
@@ -97,7 +95,7 @@ resource "aws_ecs_task_definition" "first_task" {
         "secretOptions": null,
         "options": {
           "awslogs-group": "/ecs/first-task",
-          "awslogs-region": "us-east-1",
+          "awslogs-region": "${var.region}",
           "awslogs-stream-prefix": "ecs"
         }
       },
@@ -120,8 +118,6 @@ resource "aws_iam_role" "ecsTaskExecutionRole" {
 
 #aws policy document with aws to execute ecs task_definition
 data "aws_iam_policy_document" "assume_role_policy" {
-
-
   statement {
     actions = ["sts:AssumeRole"]
 
@@ -144,15 +140,15 @@ resource "aws_default_vpc" "default_vpc" {
 
 # make reference to  default subnets
 resource "aws_default_subnet" "default_subnet_a" {
-  availability_zone = "us-east-1a" #Todo remove the hard coded value
+  availability_zone = var.availability_zones[0]
 }
 
 resource "aws_default_subnet" "default_subnet_b" {
-  availability_zone = "us-east-1b" #Todo remove the hard coded value
+  availability_zone = var.availability_zones[1]
 }
 
 resource "aws_default_subnet" "default_subnet_c" {
-  availability_zone = "us-east-1c" #Todo remove the hard coded value
+  availability_zone = var.availability_zones[2]
 }
 
 #Creating aws ALB
@@ -174,12 +170,12 @@ resource "aws_ecs_service" "first_service" {
   cluster         = "${aws_ecs_cluster.servian_ecs_cluster.id}"
   task_definition = "${aws_ecs_task_definition.first_task.arn}"
   launch_type     = "FARGATE"
-  desired_count   = 3 #Todo remove the hard coded value
+  desired_count   = var.desired_count
 
   load_balancer {
-    target_group_arn = "${aws_lb_target_group.target_group.arn}" # Referencing our target group
+    target_group_arn = "${aws_lb_target_group.target_group.arn}" # Referencing loadbalancer target group
     container_name   = "${aws_ecs_task_definition.first_task.family}"
-    container_port   = 3000 # Specifying the container port
+    container_port   = var.listen_port # Specifying the container listener port
   }
 
   network_configuration {
@@ -196,8 +192,8 @@ resource "aws_ecs_service" "first_service" {
 resource "aws_security_group" "service_security_group" {
   name = "service-security-group"
   ingress {
-    from_port = 3000 #Todo remove the hard coded value
-    to_port   = 3000 #Todo remove the hard coded value
+    from_port = var.listen_port #Todo remove the hard coded value
+    to_port   = var.listen_port #Todo remove the hard coded value
     protocol  = "TCP"
     # Only allowing traffic in from the load balancer security group
     security_groups = ["${aws_security_group.load_balancer_security_group.id}"]
@@ -232,7 +228,7 @@ resource "aws_security_group" "load_balancer_security_group" {
 #Creating aws application load balance target group
 resource "aws_lb_target_group" "target_group" {
   name        = "target-group"
-  port        = 3000 #Todo remove the hard coded value
+  port        = var.listen_port
   protocol    = "HTTP"
   target_type = "ip"
   vpc_id      = "${aws_default_vpc.default_vpc.id}" # Referencing the default VPC
@@ -251,26 +247,6 @@ resource "aws_lb_listener" "listener" {
     type             = "forward"
     target_group_arn = "${aws_lb_target_group.target_group.arn}" # Referencing our tagrte group
   }
-}
-
-output "alb_dns_name" {
-  description = "DNS name of ALB"
-  value       = aws_alb.application_load_balancer.dns_name
-}
-
-output "db_connection_endpoint" {
-  value = aws_db_instance.default.address
-}
-
-output "ecr_repo_name" {
-  value = aws_ecr_repository. servian_ecr_repo.name
-}
-output "ecr_repository_url" {
-  value = aws_ecr_repository. servian_ecr_repo.repository_url
-}
-
-output "ecr_registry_id" {
-  value = aws_ecr_repository.servian_ecr_repo.registry_id
 }
 
 

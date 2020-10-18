@@ -1,0 +1,18 @@
+#AWS Global config
+region = "us-east-1"
+
+#DB Instance config
+db_engine_version = "9.6.1"
+db_instance_class = "db.t2.micro"
+db_allocated_storage = 5
+db_name = "app"
+db_username = "postgres"
+db_password = "changeme"
+db_port = 5432
+
+#Application
+listen_port = 3000
+desired_count = 3
+
+#Network
+availability_zones = ["us-east-1a","us-east-1b","us-east-1c"]
