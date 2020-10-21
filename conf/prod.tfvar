@@ -16,3 +16,19 @@ desired_count = 3
 
 #Network
 availability_zones = ["us-east-1a","us-east-1b","us-east-1c"]
+
+#Auto Scale IN/OUT
+evaluation_periods = "3"
+period_down = "60"
+period_up = "60"
+threshold_up = "75"
+threshold_down = "25"
+statistic = "Average"
+min_capacity = "3"
+max_capacity = "6"
+lowerbound = "0"
+upperbound = "0"
+scale_up_adjustment = "1"
+scale_down_adjustment = "-1"
+datapoints_to_alarm_up = "3"
+datapoints_to_alarm_down = "3"

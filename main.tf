@@ -3,6 +3,7 @@ provider "aws" {
   region = var.region
 }
 
+
 #Create postgress RDS inside default VPC / Todo move RDS to private VPC
 resource "aws_db_instance" "default" {
   identifier = "postgres"
@@ -19,7 +20,7 @@ resource "aws_db_instance" "default" {
   password            = var.db_password
   port                = var.db_port
 
-  #vpc_security_group_ids = [data.aws_security_group.default.id]
+  vpc_security_group_ids = ["${aws_security_group.databse_security_group.id}"]
 
   maintenance_window = "Mon:00:00-Mon:03:00"
   backup_window      = "03:00-06:00"
@@ -164,6 +165,132 @@ resource "aws_alb" "application_load_balancer" {
   security_groups = ["${aws_security_group.load_balancer_security_group.id}"]
 }
 
+
+#Cloud watch matric alarm to scale up the cluster
+resource "aws_cloudwatch_metric_alarm" "ecs_service_scale_up_alarm" {
+  alarm_name          = "ECSServiceScaleUpAlarm"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = var.evaluation_periods
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/ECS"
+  period              = var.period_down
+  statistic           = var.statistic
+  threshold           = var.threshold_up
+  datapoints_to_alarm = var.datapoints_to_alarm_up
+
+  dimensions = {
+    ClusterName = "${aws_ecs_cluster.servian_ecs_cluster.name}"
+    ServiceName = "${aws_ecs_service.first_service.name}"
+  }
+
+  alarm_description = "This metric monitor ecs CPU utilization up"
+  alarm_actions     = [aws_appautoscaling_policy.scale_up.arn]
+}
+
+#Cloud watch matric alarm to scale down the cluster
+resource "aws_cloudwatch_metric_alarm" "ecs_service_scale_down_alarm" {
+  alarm_name          = "ECSServiceScaleDownAlarm"
+  comparison_operator = "LessThanOrEqualToThreshold"
+  evaluation_periods  = var.evaluation_periods
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/ECS"
+  period              = var.period_down
+  statistic           = var.statistic
+  threshold           = var.threshold_down
+  datapoints_to_alarm = var.datapoints_to_alarm_down
+
+  dimensions = {
+    ClusterName = "${aws_ecs_cluster.servian_ecs_cluster.name}"
+    ServiceName = "${aws_ecs_service.first_service.name}"
+  }
+
+  alarm_description = "This metric monitor ecs CPU utilization down"
+  alarm_actions     = [aws_appautoscaling_policy.scale_down.arn]
+}
+
+#Required IAM role to make auto scale
+resource "aws_iam_role" "ecs-autoscale-role" {
+  name = "ecs-autoscale-role"
+
+  assume_role_policy = <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Action": "sts:AssumeRole",
+      "Principal": {
+        "Service": "application-autoscaling.amazonaws.com"
+      },
+      "Effect": "Allow"
+    }
+  ]
+}
+EOF
+}
+
+#attaching the autoscale role 
+resource "aws_iam_role_policy_attachment" "ecs_autoscale" {
+  role = aws_iam_role.ecs-autoscale-role.id
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceAutoscaleRole"
+}
+
+resource "aws_iam_role_policy_attachment" "ecs_cloudwatch" {
+  role = aws_iam_role.ecs-autoscale-role.id
+  policy_arn = "arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess"
+}
+
+#defining a target for auto scaling group
+resource "aws_appautoscaling_target" "ecs_target" {
+  max_capacity       = var.max_capacity
+  min_capacity       = var.min_capacity
+  resource_id        = "service/${aws_ecs_cluster.servian_ecs_cluster.name}/${aws_ecs_service.first_service.name}"
+  role_arn           = aws_iam_role.ecs-autoscale-role.arn
+  scalable_dimension = "ecs:service:DesiredCount"
+  service_namespace  = "ecs"
+}
+
+#application auto scale down policy 
+resource "aws_appautoscaling_policy" "scale_down" {
+  name               = "scale-down"
+  resource_id        = "service/${aws_ecs_cluster.servian_ecs_cluster.name}/${aws_ecs_service.first_service.name}"
+  scalable_dimension = "ecs:service:DesiredCount"
+  service_namespace  = "ecs"
+
+  step_scaling_policy_configuration {
+    adjustment_type         = "ChangeInCapacity"
+    cooldown                = var.period_down
+    metric_aggregation_type = "Maximum"
+
+    step_adjustment {
+      metric_interval_upper_bound = var.upperbound
+      scaling_adjustment          = var.scale_down_adjustment
+    }
+  }
+
+  depends_on = [aws_appautoscaling_target.ecs_target]
+}
+
+#application auto scale up policy 
+resource "aws_appautoscaling_policy" "scale_up" {
+  name               = "scale-up"
+  resource_id        = "service/${aws_ecs_cluster.servian_ecs_cluster.name}/${aws_ecs_service.first_service.name}"
+  scalable_dimension = "ecs:service:DesiredCount"
+  service_namespace  = "ecs"
+
+  step_scaling_policy_configuration {
+    adjustment_type         = "ChangeInCapacity"
+    cooldown                = var.period_up
+    metric_aggregation_type = "Maximum"
+
+    step_adjustment {
+      metric_interval_lower_bound = var.lowerbound
+      scaling_adjustment          = var.scale_up_adjustment
+    }
+  }
+
+  depends_on = [aws_appautoscaling_target.ecs_target]
+}
+
 #Creating aws ecs service to manage first-task
 resource "aws_ecs_service" "first_service" {
   name            = "first-service"
@@ -197,6 +324,23 @@ resource "aws_security_group" "service_security_group" {
     protocol  = "TCP"
     # Only allowing traffic in from the load balancer security group
     security_groups = ["${aws_security_group.load_balancer_security_group.id}"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+resource "aws_security_group" "databse_security_group" {
+  name = "database-security-group"
+  ingress {
+    from_port = var.db_port 
+    to_port   = var.db_port
+    protocol  = "TCP"
+    # Only allowing traffic only from the  service security group
+    security_groups = ["${aws_security_group.service_security_group.id}"]
   }
 
   egress {
